@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>世界で一つの超詳細PC情報チェッカー</title>
+<style>
+  body {
+    background: #111;
+    color: #0f0;
+    font-family: "Courier New", Courier, monospace;
+    margin: 20px auto;
+    max-width: 900px;
+    line-height: 1.5;
+  }
+  h1 {
+    color: #0ff;
+    border-bottom: 2px solid #0ff;
+    padding-bottom: 0.5em;
+    margin-bottom: 1em;
+  }
+  .info-row {
+    margin-bottom: 0.6em;
+  }
+  .label {
+    display: inline-block;
+    width: 220px;
+    color: #0a0;
+  }
+  .value {
+    color: #afa;
+    word-break: break-all;
+  }
+  pre {
+    background: #222;
+    padding: 10px;
+    border-radius: 6px;
+    color: #0a0;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+</style>
+</head>
+<body>
+
+<h1>世界で一つの超詳細PC情報チェッカー</h1>
+
+<div class="info-row"><span class="label">現在日時</span>: <span class="value" id="now"></span></div>
+<div class="info-row"><span class="label">前にいたページ（リファラー）</span>: <span class="value" id="referrer"></span></div>
+
+<div class="info-row"><span class="label">OS情報 (UserAgent解析)</span>: <span class="value" id="os"></span></div>
+<div class="info-row"><span class="label">プラットフォーム</span>: <span class="value" id="platform"></span></div>
+<div class="info-row"><span class="label">ブラウザ情報</span>: <span class="value" id="browser"></span></div>
+<div class="info-row"><span class="label">ユーザーエージェント文字列</span>: <span class="value" id="ua"></span></div>
+
+<div class="info-row"><span class="label">CPUコア数</span>: <span class="value" id="cpu_cores"></span></div>
+<div class="info-row"><span class="label">CPU性能推測（ベンチ風計測）</span>: <span class="value" id="cpu_bench"></span></div>
+<div class="info-row"><span class="label">CPUモデル推測 (UserAgentと性能から)</span>: <span class="value" id="cpu_model"></span></div>
+
+<div class="info-row"><span class="label">メモリ容量（navigator.deviceMemory）</span>: <span class="value" id="memory"></span></div>
+
+<div class="info-row"><span class="label">GPUベンダー (WebGL)</span>: <span class="value" id="gpu_vendor"></span></div>
+<div class="info-row"><span class="label">GPUモデル (WebGL)</span>: <span class="value" id="gpu_renderer"></span></div>
+
+<div class="info-row"><span class="label">画面解像度</span>: <span class="value" id="screen_res"></span></div>
+<div class="info-row"><span class="label">ビューポートサイズ</span>: <span class="value" id="viewport_res"></span></div>
+<div class="info-row"><span class="label">デバイスピクセル比 (DPR)</span>: <span class="value" id="dpr"></span></div>
+<div class="info-row"><span class="label">画面色深度</span>: <span class="value" id="color_depth"></span></div>
+
+<div class="info-row"><span class="label">ネットワーク接続タイプ</span>: <span class="value" id="network_type"></span></div>
+<div class="info-row"><span class="label">ネットワークダウンリンク速度 (Mbps)</span>: <span class="value" id="net_speed"></span></div>
+
+<div class="info-row"><span class="label">Cookie利用可否</span>: <span class="value" id="cookie"></span></div>
+<div class="info-row"><span class="label">LocalStorage利用可否</span>: <span class="value" id="local_storage"></span></div>
+<div class="info-row"><span class="label">SessionStorage利用可否</span>: <span class="value" id="session_storage"></span></div>
+
+<div class="info-row"><span class="label">言語設定</span>: <span class="value" id="lang"></span></div>
+<div class="info-row"><span class="label">タイムゾーン</span>: <span class="value" id="timezone"></span></div>
+
+<div class="info-row"><span class="label">タッチスクリーン対応</span>: <span class="value" id="touch"></span></div>
+<div class="info-row"><span class="label">WebGL2対応</span>: <span class="value" id="webgl2"></span></div>
+<div class="info-row"><span class="label">WebAssembly対応</span>: <span class="value" id="wasm"></span></div>
+
+<div class="info-row"><span class="label">バッテリー情報</span>: <pre id="battery" class="value">取得中...</pre></div>
+
+<script>
+(async () => {
+  // 現在日時
+  const now = new Date();
+  document.getElementById("now").textContent = now.toLocaleString();
+
+  // リファラー
+  document.getElementById("referrer").textContent = document.referrer || "なし";
+
+  // OS情報をUserAgentでかなり細かく解析
+  function detectOS(ua) {
+    let os = "不明";
+    const osList = [
+      {name: "Windows 11/10", regex: /Windows NT 10\.0/},
+      {name: "Windows 8.1", regex: /Windows NT 6\.3/},
+      {name: "Windows 8", regex: /Windows NT 6\.2/},
+      {name: "Windows 7", regex: /Windows NT 6\.1/},
+      {name: "Windows Vista", regex: /Windows NT 6\.0/},
+      {name: "Windows XP", regex: /Windows NT 5\.1|Windows XP/},
+      {name: "Mac OS X", regex: /Mac OS X ([\d_\.]+)/},
+      {name: "iOS", regex: /iPhone|iPad|iPod/},
+      {name: "Android", regex: /Android ([\d\.]+)/},
+      {name: "Linux", regex: /Linux/}
+    ];
+    for(let item of osList) {
+      if(item.regex.test(ua)) {
+        os = item.name;
+        // バージョンが取れそうなら追加
+        const ver = ua.match(item.regex);
+        if(ver && ver[1]) {
+          os += " " + ver[1].replace(/_/g, ".");
+        }
+        break;
+      }
+    }
+    return os;
+  }
+  // ブラウザ名＋バージョン詳細
+  function detectBrowser(ua) {
+    let name = "不明", version = "";
+    const browsers = [
+      {name:"Edge", regex:/Edg\/([\d\.]+)/},
+      {name:"Chrome", regex:/Chrome\/([\d\.]+)/},
+      {name:"Firefox", regex:/Firefox\/([\d\.]+)/},
+      {name:"Safari", regex:/Version\/([\d\.]+).*Safari/},
+      {name:"Opera", regex:/OPR\/([\d\.]+)/},
+      {name:"Internet Explorer", regex:/MSIE ([\d\.]+)/},
+      {name:"Internet Explorer", regex:/Trident.*rv:([\d\.]+)/}
+    ];
+    for(let b of browsers) {
+      const m = ua.match(b.regex);
+      if(m) {
+        name = b.name;
+        version = m[1];
+        break;
+      }
+    }
+    return name + (version ? " " + version : "");
+  }
+
+  // CPUモデル推測（コア数＋ベンチスコア＋UAからざっくり推測）
+  function cpuModelEstimate(cores, bench) {
+    /*
+      目安例（ベンチスコアは独自単位で速いほど高い）
+      - 1~2 cores, 低速 => モバイル低消費電力CPU系
+      - 4 cores, ベンチ低〜中 => Core i3-10xxx or Ryzen 3〜5世代
+      - 6 cores, 中〜高 => Core i5-10xxx/11xxx or Ryzen 5 3〜4世代
+      - 8 cores以上, 高速 => Core i7/i9-11xxx以降 or Ryzen 7 4世代以降
+    */
+    if(!cores) return "推測不可";
+    if(cores <= 2) {
+      if(bench < 100) return "Intel Atom系または低性能モバイルCPU推定";
+      return "Intel Core i3モバイルまたは類似低消費電力CPU推定";
+    }
+    if(cores <= 4) {
+      if(bench < 300) return "Intel Core i3-8〜10世代、またはAMD Ryzen 3推定";
+      return "Intel Core i5-8〜10世代、AMD Ryzen 5推定";
+    }
+    if(cores <= 6) {
+      if(bench < 500) return "Intel Core i5-10〜11世代、AMD Ryzen 5推定";
+      return "Intel Core i7-9〜11世代、AMD Ryzen 7推定";
+    }
+    if(cores >= 8) {
+      if(bench < 800) return "Intel Core i7〜i9-11世代、AMD Ryzen 7〜9推定";
+      return "Intel Core i9-最新世代、AMD Ryzen 9-最新世代推定";
+    }
+    return "推測困難";
+  }
+
+  // CPUベンチっぽいものを簡易計測（約1秒）
+  async function cpuBench() {
+    return new Promise(resolve => {
+      const start = performance.now();
+      let x=0;
+      for(let i=0; i<1e7; i++) {
+        x += Math.sin(i)*Math.cos(i);
+      }
+      const elapsed = performance.now() - start;
+      // elapsedが短いほど高速、1000を超えると低速なので反転してスコア化
+      const score = Math.round(10000 / elapsed);
+      resolve(score);
+    });
+  }
+
+  // WebGLからGPU情報を取る
+  function getWebGLInfo() {
+    let canvas = document.createElement("canvas");
+    let gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    if(!gl) return {vendor: "取得不可", renderer: "取得不可"};
+
+    let debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+    let vendor = debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : "取得不可";
+    let renderer = debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : "取得不可";
+
+    return {vendor, renderer};
+  }
+
+  // ネットワーク情報
+  function getNetworkInfo() {
+    const nav = navigator;
+    const connection = nav.connection || nav.mozConnection || nav.webkitConnection;
+    if(!connection) return {type: "不明", downlink: "不明"};
+    return {type: connection.effectiveType || "不明", downlink: connection.downlink || "不明"};
+  }
+
+  // ストレージ利用可否チェック
+  function storageAvailable(type) {
+    try {
+      var storage = window[type],
+          x = "__storage_test__";
+      storage.setItem(x, x);
+      storage.removeItem(x);
+      return true;
+    }
+    catch(e) {
+      return false;
+    }
+  }
+
+  // バッテリー情報（非同期）
+  async function getBattery() {
+    if(!navigator.getBattery) return "非対応";
+    try {
+      let battery = await navigator.getBattery();
+      return `残量: ${(battery.level * 100).toFixed(1)}%\n充電中: ${battery.charging}\n残り充電時間: ${battery.chargingTime}s\n残り放電時間: ${battery.dischargingTime}s`;
+    } catch(e) {
+      return "取得エラー";
+    }
+  }
+
+  // タッチ対応判定
+  function touchSupport() {
+    if(('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (navigator.msMaxTouchPoints > 0)) return "あり";
+    return "なし";
+  }
+
+  // WebGL2対応判定
+  function webgl2Support() {
+    let canvas = document.createElement("canvas");
+    let gl2 = canvas.getContext("webgl2");
+    return gl2 ? "あり" : "なし";
+  }
+
+  // WebAssembly対応判定
+  function wasmSupport() {
+    try {
+      if(typeof WebAssembly === "object"
+         && typeof WebAssembly.instantiate === "function") {
+        const module = new WebAssembly.Module(
+          Uint8Array.from([0,97,115,109,1,0,0,0])
+        );
+        if(module instanceof WebAssembly.Module)
+          return "あり";
+      }
+    } catch(e) {}
+    return "なし";
+  }
+
+  // CPUベンチ計測
+  const benchScore = await cpuBench();
+
+  // 書き出し
+  const ua = navigator.userAgent;
+  const os = detectOS(ua);
+  const browser = detectBrowser(ua);
+  const cores = navigator.hardwareConcurrency || "不明";
+  const mem = navigator.deviceMemory ? navigator.deviceMemory + " GB" : "不明";
+  const gpu = getWebGLInfo();
+  const net = getNetworkInfo();
+  const battery = await getBattery();
+
+  document.getElementById("ua").textContent = ua;
+  document.getElementById("os").textContent = os;
+  document.getElementById("platform").textContent = navigator.platform || "不明";
+  document.getElementById("browser").textContent = browser;
+
+  document.getElementById("cpu_cores").textContent = cores;
+  document.getElementById("cpu_bench").textContent = benchScore + " (高いほど高速)";
+  document.getElementById("cpu_model").textContent = cpuModelEstimate(cores === "不明" ? 0 : cores, benchScore);
+
+  document.getElementById("memory").textContent = mem;
+  document.getElementById("gpu_vendor").textContent = gpu.vendor;
+  document.getElementById("gpu_renderer").textContent = gpu.renderer;
+
+  document.getElementById("screen_res").textContent = screen.width + " x " + screen.height;
+  document.getElementById("viewport_res").textContent = window.innerWidth + " x " + window.innerHeight;
+  document.getElementById("dpr").textContent = window.devicePixelRatio;
+  document.getElementById("color_depth").textContent = screen.colorDepth + " bit";
+
+  document.getElementById("network_type").textContent = net.type;
+  document.getElementById("net_speed").textContent = net.downlink + " Mbps";
+
+  document.getElementById("cookie").textContent = navigator.cookieEnabled ? "あり" : "なし";
+  document.getElementById("local_storage").textContent = storageAvailable("localStorage") ? "あり" : "なし";
+  document.getElementById("session_storage").textContent = storageAvailable("sessionStorage") ? "あり" : "なし";
+
+  document.getElementById("lang").textContent = navigator.language || "不明";
+  document.getElementById("timezone").textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || "不明";
+
+  document.getElementById("touch").textContent = touchSupport();
+  document.getElementById("webgl2").textContent = webgl2Support();
+  document.getElementById("wasm").textContent = wasmSupport();
+
+  document.getElementById("battery").textContent = battery;
+
+})();
+</script>
+</body>
+</html>
